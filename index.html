@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculator</title>
+<style>
+  :root {
+    --bg: #e4e8ee;
+    --body: #f6f7f9;
+    --screen: #d3dccb;
+    --screen-ink: #1d2a1c;
+    --key: #ffffff;
+    --key-ink: #1f2a37;
+    --op: #3a4a5e;
+    --op-ink: #ffffff;
+    --util: #cdd2da;
+    --util-ink: #1f2a37;
+    --accent: #e07b1a;
+    --accent-ink: #ffffff;
+    --shadow: rgba(31, 42, 55, .22);
+    --panel: #ffffff;
+    --muted: #6b7684;
+  }
+  [data-theme="dark"] {
+    --bg: #0f1318;
+    --body: #1c232d;
+    --screen: #27382a;
+    --screen-ink: #c9f2c4;
+    --key: #2e3947;
+    --key-ink: #eef1f5;
+    --op: #46586e;
+    --util: #56616f;
+    --util-ink: #f2f4f7;
+    --shadow: rgba(0, 0, 0, .5);
+    --panel: #232c38;
+    --muted: #93a0b0;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { min-height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    display: grid;
+    place-items: center;
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    padding: 16px;
+    transition: background .3s;
+  }
+  .calc {
+    position: relative;
+    width: 100%;
+    max-width: 360px;
+    background: var(--body);
+    border-radius: 24px;
+    padding: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 44px var(--shadow);
+    transition: background .3s;
+  }
+  .bar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .bar button {
+    height: 32px; width: auto; padding: 0 12px; font-size: 13px; border-radius: 16px;
+    background: var(--util); color: var(--util-ink); box-shadow: none;
+  }
+  .bar button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .bar .spacer { flex: 1; }
+
+  .screen {
+    position: relative;
+    background: var(--screen);
+    color: var(--screen-ink);
+    border-radius: 14px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    text-align: right;
+    min-height: 96px;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.28);
+    overflow: hidden;
+    cursor: copy;
+    transition: background .3s;
+  }
+  .screen .mem { position: absolute; left: 12px; top: 8px; font-size: 12px; font-weight: 700; opacity: 0; transition: opacity .2s; }
+  .screen .mem.on { opacity: .8; }
+  .history { font-size: 14px; opacity: .65; min-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .display { font-family: "Courier New", monospace; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; font-size: 40px; }
+  .screen.error { animation: shake .35s; }
+  @keyframes shake { 20%,60% { transform: translateX(-6px); } 40%,80% { transform: translateX(6px); } }
+
+  .keys, .sci-grid, .memrow { display: grid; gap: 10px; }
+  .keys, .memrow { grid-template-columns: repeat(4, 1fr); }
+  .sci-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .memrow { margin-bottom: 10px; gap: 8px; }
+
+  .sci { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .3s ease; }
+  .sci > div { overflow: hidden; }
+  .sci.open { grid-template-rows: 1fr; }
+  .sci.open > div { padding-bottom: 10px; }
+
+  button {
+    position: relative; overflow: hidden;
+    font: inherit; font-size: 22px; height: 56px; width: 100%;
+    border: 0; border-radius: 12px;
+    background: var(--key); color: var(--key-ink);
+    cursor: pointer;
+    box-shadow: 0 3px 0 var(--shadow);
+    transition: transform .06s, box-shadow .06s, filter .15s;
+  }
+  button:hover { filter: brightness(1.06); }
+  button:active, button.pressed { transform: translateY(3px); box-shadow: 0 0 0 var(--shadow); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .op { background: var(--op); color: var(--op-ink); }
+  .op.active { background: var(--accent); }
+  .util { background: var(--util); color: var(--util-ink); }
+  .eq { background: var(--accent); color: var(--accent-ink); }
+  .sm { height: 42px; font-size: 15px; border-radius: 10px; }
+  .mem-btn { height: 30px; font-size: 13px; background: transparent; color: var(--muted); box-shadow: none; }
+  .mem-btn:active { transform: none; }
+
+  .ripple {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    background: rgba(255,255,255,.45); transform: scale(0);
+    animation: ripple .5s ease-out forwards;
+  }
+  @keyframes ripple { to { transform: scale(2.6); opacity: 0; } }
+
+  .hist {
+    position: absolute; inset: 0; background: var(--panel); z-index: 5;
+    padding: 16px; display: flex; flex-direction: column;
+    transform: translateY(100%); visibility: hidden;
+    transition: transform .3s ease, visibility 0s .3s;
+  }
+  .hist.open { transform: none; visibility: visible; transition: transform .3s ease; }
+  .hist header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: var(--key-ink); }
+  .hist h2 { margin: 0; font-size: 18px; }
+  .hist header button { width: auto; height: 32px; padding: 0 12px; font-size: 13px; border-radius: 16px; box-shadow: none; background: var(--util); color: var(--util-ink); }
+  .hist ul { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+  .hist li button {
+    height: auto; text-align: right; padding: 10px 6px; border-radius: 8px; box-shadow: none;
+    background: transparent; color: var(--key-ink); font-size: 20px; font-family: "Courier New", monospace; font-weight: 700;
+  }
+  .hist li small { display: block; font: 13px "Trebuchet MS", sans-serif; color: var(--muted); font-weight: 400; }
+  .hist .empty { color: var(--muted); font-size: 14px; padding: 16px 6px; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 20px);
+    background: #1f2a37; color: #fff; padding: 8px 16px; border-radius: 20px; font-size: 14px;
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="calc" aria-label="Calculator">
+  <div class="bar">
+    <button id="sciBtn" aria-pressed="false">Scientific</button>
+    <button id="histBtn">History</button>
+    <span class="spacer"></span>
+    <button id="themeBtn" aria-label="Toggle dark mode">Dark</button>
+  </div>
+
+  <div class="screen" id="screen" title="Click to copy result" aria-live="polite">
+    <span class="mem" id="memInd">M</span>
+    <div class="history" id="history"></div>
+    <div class="display" id="display">0</div>
+  </div>
+
+  <div class="memrow">
+    <button class="mem-btn" data-mem="mc">MC</button>
+    <button class="mem-btn" data-mem="mr">MR</button>
+    <button class="mem-btn" data-mem="m+">M+</button>
+    <button class="mem-btn" data-mem="m-">M−</button>
+  </div>
+
+  <div class="sci" id="sci" aria-hidden="true"><div>
+    <div class="sci-grid">
+      <button class="sm" data-fn="sin">sin</button>
+      <button class="sm" data-fn="cos">cos</button>
+      <button class="sm" data-fn="tan">tan</button>
+      <button class="sm" data-fn="log">log</button>
+      <button class="sm" data-fn="ln">ln</button>
+      <button class="sm" data-fn="sqrt">√</button>
+      <button class="sm" data-fn="sq">x²</button>
+      <button class="sm op" data-op="^">xʸ</button>
+      <button class="sm" data-fn="inv">1/x</button>
+      <button class="sm" data-fn="fact">n!</button>
+      <button class="sm" data-fn="pi">π</button>
+      <button class="sm" data-fn="e">e</button>
+      <button class="sm util" id="angleBtn" data-action="angle">DEG</button>
+      <button class="sm" data-fn="exp">eˣ</button>
+      <button class="sm" data-fn="pow10">10ˣ</button>
+    </div>
+  </div></div>
+
+  <div class="keys">
+    <button class="util" data-action="clear">AC</button>
+    <button class="util" data-action="sign" aria-label="Plus or minus">±</button>
+    <button class="util" data-action="percent">%</button>
+    <button class="op" data-op="÷">÷</button>
+
+    <button data-num="7">7</button><button data-num="8">8</button><button data-num="9">9</button>
+    <button class="op" data-op="×">×</button>
+
+    <button data-num="4">4</button><button data-num="5">5</button><button data-num="6">6</button>
+    <button class="op" data-op="−">−</button>
+
+    <button data-num="1">1</button><button data-num="2">2</button><button data-num="3">3</button>
+    <button class="op" data-op="+">+</button>
+
+    <button data-action="back" aria-label="Backspace">⌫</button>
+    <button data-num="0">0</button>
+    <button data-action="dot">.</button>
+    <button class="eq" data-action="equals">=</button>
+  </div>
+
+  <aside class="hist" id="hist" aria-hidden="true">
+    <header><h2>History</h2><div><button id="histClear">Clear</button> <button id="histClose">Close</button></div></header>
+    <ul id="histList"></ul>
+  </aside>
+</main>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  };
+
+  const s = {
+    cur: '0', prev: null, op: null, fresh: false, error: false,
+    mem: 0, deg: store.get('deg', true), last: '', hist: store.get('hist', [])
+  };
+
+  const displayEl = $('#display'), historyEl = $('#history'), screenEl = $('#screen');
+
+  /* ---------- formatting ---------- */
+  const clean = (v) => {
+    if (Math.abs(v) < 1e-12) return '0';
+    const n = parseFloat(v.toPrecision(12));
+    if (n !== 0 && (Math.abs(n) >= 1e15 || Math.abs(n) < 1e-9))
+      return n.toExponential(6).replace(/\.?0+e/, 'e').replace('e+', 'e');
+    return String(n);
+  };
+  const pretty = (str) => {
+    if (s.error || /e/.test(str) || isNaN(parseFloat(str))) return str;
+    const neg = str.startsWith('-'); const body = neg ? str.slice(1) : str;
+    const [i, d] = body.split('.');
+    const withCommas = i.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (neg ? '-' : '') + withCommas + (body.includes('.') ? '.' + (d ?? '') : '');
+  };
+
+  /* ---------- rendering ---------- */
+  function render() {
+    const t = pretty(s.cur);
+    displayEl.textContent = t;
+    displayEl.style.fontSize = t.length > 20 ? '16px' : t.length > 13 ? '24px' : t.length > 9 ? '32px' : '40px';
+    historyEl.textContent = s.op ? `${pretty(s.prev)} ${s.op}` : s.last;
+    document.querySelectorAll('.op[data-op]').forEach((b) =>
+      b.classList.toggle('active', !!s.op && s.fresh && b.dataset.op === s.op));
+    $('#memInd').classList.toggle('on', s.mem !== 0);
+    $('#angleBtn').textContent = s.deg ? 'DEG' : 'RAD';
+  }
+
+  function toast(msg) {
+    const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast.id); toast.id = setTimeout(() => t.classList.remove('show'), 1400);
+  }
+
+  function setError(msg) {
+    s.cur = msg; s.error = true; s.prev = null; s.op = null; s.fresh = true; s.last = '';
+    screenEl.classList.remove('error'); void screenEl.offsetWidth; screenEl.classList.add('error');
+  }
+
+  /* ---------- history ---------- */
+  function addHistory(expr, result) {
+    s.hist.unshift({ expr, result });
+    s.hist = s.hist.slice(0, 30);
+    store.set('hist', s.hist);
+    renderHistory();
+  }
+  function renderHistory() {
+    const ul = $('#histList');
+    ul.innerHTML = '';
+    if (!s.hist.length) {
+      ul.innerHTML = '<li class="empty">No calculations yet. Results you finish appear here.</li>';
+      return;
+    }
+    s.hist.forEach((h) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.innerHTML = '<small></small><span></span>';
+      b.firstChild.textContent = h.expr + ' =';
+      b.lastChild.textContent = pretty(h.result);
+      b.addEventListener('click', () => {
+        s.cur = h.result; s.fresh = true; s.error = false; s.prev = null; s.op = null; s.last = '';
+        toggleHistory(false); render();
+      });
+      li.appendChild(b); ul.appendChild(li);
+    });
+  }
+  function toggleHistory(open) {
+    $('#hist').classList.toggle('open', open);
+    $('#hist').setAttribute('aria-hidden', String(!open));
+  }
+
+  /* ---------- math ---------- */
+  const OPS = {
+    '+': (a, b) => a + b, '−': (a, b) => a - b, '×': (a, b) => a * b,
+    '÷': (a, b) => a / b, '^': (a, b) => Math.pow(a, b)
+  };
+  const toRad = (v) => (s.deg ? v * Math.PI / 180 : v);
+  const FNS = {
+    sin: (v) => Math.sin(toRad(v)),
+    cos: (v) => Math.cos(toRad(v)),
+    tan: (v) => {
+      if (s.deg && Math.abs(v % 180) === 90) throw new Error('Undefined');
+      return Math.tan(toRad(v));
+    },
+    log: (v) => { if (v <= 0) throw new Error('Invalid input'); return Math.log10(v); },
+    ln: (v) => { if (v <= 0) throw new Error('Invalid input'); return Math.log(v); },
+    sqrt: (v) => { if (v < 0) throw new Error('Invalid input'); return Math.sqrt(v); },
+    sq: (v) => v * v,
+    inv: (v) => { if (v === 0) throw new Error('Cannot divide by 0'); return 1 / v; },
+    fact: (v) => {
+      if (!Number.isInteger(v) || v < 0 || v > 170) throw new Error('Invalid input');
+      let r = 1; for (let i = 2; i <= v; i++) r *= i; return r;
+    },
+    exp: (v) => Math.exp(v),
+    pow10: (v) => Math.pow(10, v)
+  };
+
+  function evaluate(chain = false) {
+    if (!s.op || s.prev === null) return false;
+    const a = parseFloat(s.prev), b = parseFloat(s.cur);
+    if (s.op === '÷' && b === 0) { setError('Cannot divide by 0'); return false; }
+    const r = OPS[s.op](a, b);
+    if (!isFinite(r)) { setError('Invalid input'); return false; }
+    const expr = `${pretty(s.prev)} ${s.op} ${pretty(s.cur)}`;
+    s.cur = clean(r);
+    addHistory(expr, s.cur);
+    if (!chain) { s.last = expr + ' ='; s.prev = null; s.op = null; }
+    s.fresh = true;
+    return true;
+  }
+
+  /* ---------- actions ---------- */
+  function resetIfError() {
+    if (s.error) { s.cur = '0'; s.error = false; s.fresh = false; }
+  }
+  function inputNumber(d) {
+    resetIfError();
+    if (s.fresh) { s.cur = '0'; s.fresh = false; if (!s.op) s.last = ''; }
+    if (s.cur.replace(/[-.]/g, '').length >= 15) return;
+    s.cur = s.cur === '0' ? d : s.cur === '-0' ? '-' + d : s.cur + d;
+  }
+  function inputDot() {
+    resetIfError();
+    if (s.fresh) { s.cur = '0'; s.fresh = false; }
+    if (!s.cur.includes('.')) s.cur += '.';
+  }
+  function chooseOp(op) {
+    if (s.error) return;
+    if (s.op && !s.fresh) { if (!evaluate(true)) return; }
+    s.prev = s.cur; s.op = op; s.fresh = true; s.last = '';
+  }
+  function applyFn(name) {
+    resetIfError();
+    try {
+      let r;
+      if (name === 'pi') r = Math.PI;
+      else if (name === 'e') r = Math.E;
+      else r = FNS[name](parseFloat(s.cur));
+      if (!isFinite(r)) throw new Error('Invalid input');
+      s.cur = clean(r); s.fresh = true;
+    } catch (err) { setError(err.message); }
+  }
+  function memory(kind) {
+    const v = parseFloat(s.cur);
+    if (kind === 'mc') s.mem = 0;
+    else if (kind === 'mr') { resetIfError(); s.cur = clean(s.mem); s.fresh = true; }
+    else if (!isNaN(v)) s.mem = kind === 'm+' ? s.mem + v : s.mem - v;
+    if (kind === 'm+' || kind === 'm-') s.fresh = true;
+  }
+
+  function handle(btn) {
+    const d = btn.dataset;
+    if (d.num !== undefined) inputNumber(d.num);
+    else if (d.op) chooseOp(d.op);
+    else if (d.fn) applyFn(d.fn);
+    else if (d.mem) memory(d.mem);
+    else switch (d.action) {
+      case 'dot': inputDot(); break;
+      case 'equals': evaluate(); break;
+      case 'clear': s.cur = '0'; s.prev = null; s.op = null; s.fresh = false; s.error = false; s.last = ''; break;
+      case 'sign':
+        if (!s.error && s.cur !== '0') s.cur = s.cur.startsWith('-') ? s.cur.slice(1) : '-' + s.cur;
+        break;
+      case 'percent':
+        if (s.error) break;
+        s.cur = clean(s.op && s.prev !== null
+          ? parseFloat(s.prev) * parseFloat(s.cur) / 100
+          : parseFloat(s.cur) / 100);
+        break;
+      case 'back':
+        if (s.fresh || s.error) break;
+        s.cur = s.cur.length > 1 && !(s.cur.length === 2 && s.cur[0] === '-') ? s.cur.slice(0, -1) : '0';
+        break;
+      case 'angle': s.deg = !s.deg; store.set('deg', s.deg); break;
+    }
+    try { navigator.vibrate && navigator.vibrate(8); } catch {}
+    render();
+  }
+
+  /* ---------- events ---------- */
+  document.querySelector('.calc').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (btn && (btn.dataset.num !== undefined || btn.dataset.op || btn.dataset.fn || btn.dataset.mem || btn.dataset.action)) handle(btn);
+  });
+
+  // ripple effect
+  document.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest('button');
+    if (!b || b.closest('.hist')) return;
+    const r = b.getBoundingClientRect(), size = Math.max(r.width, r.height);
+    const span = document.createElement('span');
+    span.className = 'ripple';
+    span.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size / 2}px;top:${e.clientY - r.top - size / 2}px`;
+    b.appendChild(span);
+    span.addEventListener('animationend', () => span.remove());
+  });
+
+  // copy result
+  screenEl.addEventListener('click', async () => {
+    if (s.error) return;
+    try { await navigator.clipboard.writeText(s.cur); toast('Copied ' + pretty(s.cur)); }
+    catch { toast('Copy not available here'); }
+  });
+
+  // scientific toggle
+  $('#sciBtn').addEventListener('click', (e) => {
+    const open = !$('#sci').classList.contains('open');
+    $('#sci').classList.toggle('open', open);
+    $('#sci').setAttribute('aria-hidden', String(!open));
+    e.currentTarget.setAttribute('aria-pressed', String(open));
+    store.set('sci', open);
+  });
+
+  // theme
+  function setTheme(t) {
+    document.documentElement.dataset.theme = t;
+    $('#themeBtn').textContent = t === 'dark' ? 'Light' : 'Dark';
+    store.set('theme', t);
+  }
+  $('#themeBtn').addEventListener('click', () =>
+    setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+  // history panel
+  $('#histBtn').addEventListener('click', () => toggleHistory(true));
+  $('#histClose').addEventListener('click', () => toggleHistory(false));
+  $('#histClear').addEventListener('click', () => { s.hist = []; store.set('hist', []); renderHistory(); });
+
+  // keyboard
+  const KEYS = { '*': '[data-op="×"]', '/': '[data-op="÷"]', '-': '[data-op="−"]', '+': '[data-op="+"]', '^': '[data-op="^"]',
+    '.': '[data-action="dot"]', ',': '[data-action="dot"]', Enter: '[data-action="equals"]', '=': '[data-action="equals"]',
+    Backspace: '[data-action="back"]', Escape: '[data-action="clear"]', Delete: '[data-action="clear"]',
+    '%': '[data-action="percent"]', '!': '[data-fn="fact"]' };
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if ($('#hist').classList.contains('open')) { if (e.key === 'Escape') toggleHistory(false); return; }
+    const sel = /^[0-9]$/.test(e.key) ? `[data-num="${e.key}"]` : KEYS[e.key];
+    const btn = sel && document.querySelector('.calc ' + sel);
+    if (!btn) return;
+    e.preventDefault();
+    btn.classList.add('pressed'); setTimeout(() => btn.classList.remove('pressed'), 120);
+    handle(btn);
+  });
+
+  /* ---------- init ---------- */
+  setTheme(store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  if (store.get('sci', false)) $('#sciBtn').click();
+  renderHistory();
+  render();
+})();
+</script>
+</body>
+</html>
